@@ -36,7 +36,9 @@ func PutManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 	if err != nil {
 		log.Error("[REGISTRY API V2] Failed to get manifest digest: %v", err.Error())
 
-		result, _ := json.Marshal(map[string]string{"message": "Failed to get manifest digest"})
+		detail := map[string]string{"Name": namespace + "/" + repository, "Tag": tag, "Digest": digest}
+		msg := "provided digest did not match uploaded content"
+		result, _ := module.FormatErr(module.DIGEST_INVALID, msg, detail)
 		return http.StatusBadRequest, result
 	}
 
@@ -44,7 +46,8 @@ func PutManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 	if err := r.Put(namespace, repository, "", agent, setting.APIVERSION_V2); err != nil {
 		log.Error("[REGISTRY API V2] Failed to save repository %v/%v: %v", namespace, repository, err.Error())
 
-		result, _ := json.Marshal(map[string]string{"message": "Failed to save repository"})
+		detail := map[string]string{"Name": namespace + "/" + repository, "Tag": tag}
+		result, _ := module.FormatErr(module.MANIFEST_BLOB_UNKNOWN, err.Error(), detail)
 		return http.StatusInternalServerError, result
 	}
 
@@ -52,7 +55,8 @@ func PutManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 	if err != nil {
 		log.Error("[REGISTRY API V2] Failed to decode manifest: %v", err.Error())
 
-		result, _ := json.Marshal(map[string]string{"message": "Failed to decode manifest"})
+		detail := map[string]string{"Name": namespace + "/" + repository, "Tag": tag}
+		result, _ := module.FormatErr(module.MANIFEST_INVALID, err.Error(), detail)
 		return http.StatusBadRequest, result
 	}
 
@@ -63,12 +67,20 @@ func PutManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 		repository,
 		digest)
 
+	ctx.Resp.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	ctx.Resp.Header().Set("Docker-Content-Digest", digest)
 	ctx.Resp.Header().Set("Location", random)
 
+	if err := module.UploadLayer(manifest); err != nil {
+		log.Error("[REGISTRY API V2] Failed to upload layer: %v", err)
+
+		detail := map[string]string{"Name": namespace + "/" + repository, "Tag": tag}
+		result, _ := module.FormatErr(module.BLOB_UPLOAD_INVALID, err.Error(), detail)
+		return http.StatusBadRequest, result
+	}
+
 	var status = []int{http.StatusBadRequest, http.StatusAccepted, http.StatusCreated}
-	result, _ := json.Marshal(map[string]string{})
-	return status[schema], result
+	return status[schema], []byte{}
 }
 
 func GetTagsListV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
@@ -79,7 +91,8 @@ func GetTagsListV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byt
 	if _, err := r.Get(namespace, repository); err != nil {
 		log.Error("[REGISTRY API V2] Failed to get repository %v/%v: %v", namespace, repository, err.Error())
 
-		result, _ := json.Marshal(map[string]string{"message": "Failed to get repository"})
+		detail := map[string]string{"Name": namespace + "/" + repository}
+		result, _ := module.FormatErr(module.TAG_INVALID, err.Error(), detail)
 		return http.StatusBadRequest, result
 	}
 
@@ -89,10 +102,11 @@ func GetTagsListV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byt
 
 	tagslist := r.GetTagslist()
 	if len(tagslist) <= 0 {
-		log.Error("[REGISTRY API V2] Repository %v/%v tags list is empty", namespace, repository)
+		log.Error("[REGISTRY API V2] Repository %v/%v tags not found", namespace, repository)
 
-		result, _ := json.Marshal(map[string]string{"message": "Tags list is empty"})
-		return http.StatusInternalServerError, result
+		detail := map[string]string{"Name": namespace + "/" + repository}
+		result, _ := module.FormatErr(module.NAME_UNKNOWN, "repository name not known to registry", detail)
+		return http.StatusNotFound, result
 	}
 	data["tags"] = tagslist
 
@@ -109,7 +123,8 @@ func GetManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 	if exists, err := t.Get(namespace, repository, tag); err != nil || !exists {
 		log.Error("[REGISTRY API V2] Not found manifest: %v", err)
 
-		result, _ := json.Marshal(map[string]string{"message": "Not found manifest"})
+		detail := map[string]string{"Name": namespace + "/" + repository, "Tag": tag}
+		result, _ := module.FormatErr(module.MANIFEST_UNKNOWN, "manifest unknown", detail)
 		return http.StatusNotFound, result
 	}
 
@@ -117,13 +132,16 @@ func GetManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 	if err != nil {
 		log.Error("[REGISTRY API V2] Failed to get manifest digest: %v", err.Error())
 
-		result, _ := json.Marshal(map[string]string{"message": "Failed to get manifest digest"})
+		detail := map[string]string{"Name": namespace + "/" + repository, "Tag": tag}
+		msg := "provided digest did not match uploaded content"
+		result, _ := module.FormatErr(module.DIGEST_INVALID, msg, detail)
 		return http.StatusInternalServerError, result
 	}
 
 	contenttype := []string{"", "application/json; charset=utf-8", "application/vnd.docker.distribution.manifest.v2+json"}
 	ctx.Resp.Header().Set("Content-Type", contenttype[t.Schema])
 
+	ctx.Resp.Header().Set("Content-Type", "application/json; charset=utf-8")
 	ctx.Resp.Header().Set("Docker-Content-Digest", digest)
 	ctx.Resp.Header().Set("Content-Length", fmt.Sprint(len(t.Manifest)))
 

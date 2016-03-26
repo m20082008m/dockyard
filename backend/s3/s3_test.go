@@ -1,13 +1,12 @@
-package qiniu
+package s3
 
 import (
-	"net/http"
 	"testing"
 
 	"github.com/containerops/dockyard/utils/setting"
 )
 
-func Test_qiniusave(t *testing.T) {
+func Test_amazons3save(t *testing.T) {
 	var err error
 	var url string
 
@@ -15,13 +14,11 @@ func Test_qiniusave(t *testing.T) {
 		t.Error(err)
 	}
 
-	file := "qiniu_test.go"
-	url, err = qiniusave(file)
+	file := "amazons3_test.go"
+	s := new(s3desc)
+	url, err = s.Save(file)
 	if err != nil {
 		t.Error(err)
 	}
-	_, err = http.Get(url)
-	if err != nil {
-		t.Error(err)
-	}
+	t.Log(url)
 }

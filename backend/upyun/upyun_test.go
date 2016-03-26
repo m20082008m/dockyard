@@ -16,7 +16,8 @@ func Test_upyunsave(t *testing.T) {
 	}
 
 	file := "upyun_test.go"
-	url, err = upyunsave(file)
+	u := new(upyundesc)
+	url, err = u.Save(file)
 	if err != nil {
 		t.Error(err)
 	}

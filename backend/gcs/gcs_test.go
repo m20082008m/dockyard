@@ -1,4 +1,4 @@
-package googlecloud
+package gcs
 
 import (
 	"io"
@@ -46,7 +46,9 @@ func TestGcssave(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	retUrl, err := googlecloudsave(upFileName)
+
+	g := new(gcsdesc)
+	retUrl, err := g.Save(upFileName)
 	if err != nil {
 		t.Error(err)
 	}

@@ -1,12 +1,13 @@
-package amazons3
+package qiniu
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/containerops/dockyard/utils/setting"
 )
 
-func Test_amazons3save(t *testing.T) {
+func Test_qiniusave(t *testing.T) {
 	var err error
 	var url string
 
@@ -14,10 +15,14 @@ func Test_amazons3save(t *testing.T) {
 		t.Error(err)
 	}
 
-	file := "amazons3_test.go"
-	url, err = amazons3save(file)
+	file := "qiniu_test.go"
+	q := new(qiniudesc)
+	url, err = q.Save(file)
 	if err != nil {
 		t.Error(err)
 	}
-	t.Log(url)
+	_, err = http.Get(url)
+	if err != nil {
+		t.Error(err)
+	}
 }

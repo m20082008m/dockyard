@@ -16,7 +16,8 @@ func Test_aliyunsave(t *testing.T) {
 	}
 
 	file := "aliyun_test.go"
-	url, err = aliyunsave(file)
+	a := new(aliyundesc)
+	url, err = a.Save(file)
 	if err != nil {
 		t.Error(err)
 	}

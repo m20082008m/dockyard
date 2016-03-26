@@ -15,7 +15,8 @@ func Test_qcloudsave(t *testing.T) {
 	}
 
 	file := "qcloud_test.go"
-	url, err := qcloudsave(file)
+	q := new(qclouddesc)
+	url, err := q.Save(file)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
