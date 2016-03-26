@@ -37,6 +37,7 @@ func SetRouters(m *macaron.Macaron) {
 	//Docker Registry & Hub V2 API
 	m.Group("/v2", func() {
 		m.Get("/", handler.GetPingV2Handler)
+		m.Get("/_catalog", handler.GetCatalogV2Handler)
 		m.Head("/:namespace/:repository/blobs/:digest", handler.HeadBlobsV2Handler)
 		m.Post("/:namespace/:repository/blobs/uploads", handler.PostBlobsV2Handler)
 		m.Patch("/:namespace/:repository/blobs/uploads/:uuid", handler.PatchBlobsV2Handler)

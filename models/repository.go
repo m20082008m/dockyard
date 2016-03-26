@@ -53,6 +53,9 @@ func (r *Repository) Save(namespace, repository string) error {
 	return err
 }
 
+func (r *Repository) List() ([]string, error) {
+	return db.Drv.List(r)
+}
 func (r *Repository) GetTagslist() []string {
 	if len(r.Tagslist) <= 0 {
 		return []string{}

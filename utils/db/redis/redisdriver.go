@@ -116,3 +116,26 @@ func (r *redisdrv) Insert(obj interface{}) error {
 func (r *redisdrv) Update(obj interface{}, params ...string) error {
 	return r.Save(obj, params...)
 }
+
+func (r *redisdrv) List(obj interface{}) ([]string, error) {
+	object := reflect.TypeOf(obj).Elem().Name()
+	result := []string{}
+	var err error
+
+	switch strings.ToLower(object) {
+	case "repository":
+		result, err = Client.Keys("REPO-*").Result()
+	case "image":
+		result, err = Client.Keys("IMAGE-*").Result()
+	case "tag":
+		result, err = Client.Keys("TAG-*").Result()
+	default:
+		result = []string{}
+	}
+	for i := 0; i < len(result); i++ {
+		res := strings.Split(result[i], "REPO-")
+		res = strings.Split(res[1], "-")
+		result[i] = strings.Join(res, "/")
+	}
+	return result, err
+}
