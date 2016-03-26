@@ -11,6 +11,7 @@ import (
 	_ "github.com/containerops/dockyard/backend/qiniu"
 	_ "github.com/containerops/dockyard/backend/s3"
 	_ "github.com/containerops/dockyard/backend/upyun"
+	_ "github.com/containerops/dockyard/backend/rados"
 )
 
 var Drv factory.DrvInterface
