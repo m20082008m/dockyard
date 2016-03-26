@@ -39,6 +39,7 @@ var (
 
 	//Dockyard
 	Backend             string
+	Cachable            bool
 	ImagePath           string
 	Domains             string
 	RegistryVersion     string
@@ -48,7 +49,6 @@ var (
 )
 
 // object storage driver config parameters
-// TBD: It should be considered to refine the universal config parameters
 var (
 	Endpoint        string
 	Bucket          string
@@ -183,10 +183,9 @@ func SetConfig(path string) error {
 	DBDB = dbpartition
 
 	//config Dockyard
+	ImagePath = "data" //store image layer in local fs by default
 	if imagepath := conf.String("dockyard::path"); imagepath != "" {
 		ImagePath = imagepath
-	} else if imagepath == "" {
-		err = fmt.Errorf("Image path config value is null")
 	}
 
 	if domains := conf.String("dockyard::domains"); domains != "" {
@@ -220,6 +219,11 @@ func SetConfig(path string) error {
 
 	//Config of object storage service
 	if Backend = conf.String("dockyard::backend"); Backend != "" {
+		if cachable, err0 := conf.Bool("dockyard::cachable"); err0 != nil {
+			Cachable = true
+		} else {
+			Cachable = cachable
+		}
 	}
 
 	// TODO: It should be considered to refine the universal config parameters

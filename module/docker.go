@@ -17,6 +17,7 @@ import (
 	"github.com/containerops/dockyard/backend"
 	"github.com/containerops/dockyard/models"
 	"github.com/containerops/dockyard/utils"
+	"github.com/containerops/dockyard/utils/setting"
 )
 
 var (
@@ -138,7 +139,7 @@ func UploadLayer(data []byte) error {
 			return fmt.Errorf("layer is not existent")
 		}
 
-		if _, err = os.Stat(i.Path); err != nil {
+		if _, err = os.Stat(i.Path); err != nil && !setting.Cachable {
 			continue
 		}
 
@@ -148,6 +149,13 @@ func UploadLayer(data []byte) error {
 		if _, err = backend.Drv.Save(i.Path); err != nil {
 			issuccess = false
 			break
+		}
+	}
+
+	//Remove the layer in local fs while upload successfully
+	if !setting.Cachable {
+		for _, v := range tarsumlist {
+			CleanCache(v, setting.APIVERSION_V2)
 		}
 	}
 
