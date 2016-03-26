@@ -17,6 +17,7 @@ type Tag struct {
 	Memo       string    `json:"memo" orm:"null;type(text)"`
 	Created    time.Time `json:"created" orm:"auto_now_add;type(datetime)"`
 	Updated    time.Time `json:"updated" orm:"auto_now;type(datetime)"`
+	Reference  string    `json:"reference" orm:"varchar(255)"`
 }
 
 func (t *Tag) TableUnique() [][]string {
@@ -28,6 +29,11 @@ func (t *Tag) TableUnique() [][]string {
 func (t *Tag) Get(namespace, repository, tag string) (bool, error) {
 	t.Namespace, t.Repository, t.Tag = namespace, repository, tag
 	return db.Drv.Get(t, namespace, repository, tag)
+}
+
+func (t *Tag) GetReference(namespace, repository, reference string) (bool, error) {
+	t.Namespace, t.Repository, t.Reference = namespace, repository, reference
+	return db.Drv.Get(t, namespace, repository, reference)
 }
 
 func (t *Tag) Save(namespace, repository, tag string) error {
@@ -43,6 +49,20 @@ func (t *Tag) Save(namespace, repository, tag string) error {
 	} else {
 		err = db.Drv.Update(t)
 	}
+
+	return err
+
+}
+
+func (t *Tag) DeleteReference(namespace, repository, reference string) error {
+	tg := Tag{Namespace: namespace, Repository: repository, Reference: reference}
+	_, err := tg.GetReference(namespace, repository, reference)
+	if err != nil {
+		return err
+	}
+
+	t.Namespace, t.Repository, t.Reference = namespace, repository, reference
+	err = db.Drv.Delete(t)
 
 	return err
 

@@ -32,6 +32,13 @@ func PutManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 		manifest, _ = ctx.Req.Body().Bytes()
 	}
 
+	if stacode, _ := module.UpdateManifest(namespace, repository, tag, string(manifest)); stacode != http.StatusOK {
+		detail := map[string]string{"Name": namespace + "/" + repository, "Tag": tag}
+		msg := "Failed to update manifest info"
+		result, _ := module.FormatErr(module.DIGEST_INVALID, msg, detail)
+		return http.StatusBadRequest, result
+	}
+
 	digest, err := signature.DigestManifest(manifest)
 	if err != nil {
 		log.Error("[REGISTRY API V2] Failed to get manifest digest: %v", err.Error())
@@ -57,6 +64,21 @@ func PutManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 
 		detail := map[string]string{"Name": namespace + "/" + repository, "Tag": tag}
 		result, _ := module.FormatErr(module.MANIFEST_INVALID, err.Error(), detail)
+		return http.StatusBadRequest, result
+	}
+
+	tg := new(models.Tag)
+	if exists, err := tg.Get(namespace, repository, tag); err != nil || !exists {
+		detail := map[string]string{"Name": namespace + "/" + repository, "Tag": tag}
+		msg := "manifest unknow"
+		result, _ := module.FormatErr(module.DIGEST_INVALID, msg, detail)
+		return http.StatusBadRequest, result
+	}
+	tg.Reference = digest
+	if err := tg.Save(namespace, repository, tag); err != nil {
+		detail := map[string]string{"Name": namespace + "/" + repository, "Tag": tag}
+		msg := "failed to save manifest"
+		result, _ := module.FormatErr(module.DIGEST_INVALID, msg, detail)
 		return http.StatusBadRequest, result
 	}
 
@@ -146,4 +168,39 @@ func GetManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 	ctx.Resp.Header().Set("Content-Length", fmt.Sprint(len(t.Manifest)))
 
 	return http.StatusOK, []byte(t.Manifest)
+}
+
+func DeleteManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
+	//TODO: to consider parallel situation
+
+	namespace := ctx.Params(":namespace")
+	repository := ctx.Params(":repository")
+	reference := ctx.Params(":reference")
+
+	t := new(models.Tag)
+	if exists, err := t.GetReference(namespace, repository, reference); err != nil || !exists {
+		log.Info("[REGISTRY API V2] Failed to get tag : %v", err.Error())
+
+		detail := map[string]string{"Name": namespace + "/" + repository, "Reference": reference}
+		result, _ := module.FormatErr(module.MANIFEST_UNKNOWN, "manifest unknown", detail)
+		return http.StatusBadRequest, result
+	} else if !exists {
+		detail := map[string]string{"Name": namespace + "/" + repository, "Reference": reference}
+		result, _ := module.FormatErr(module.MANIFEST_UNKNOWN, "manifest unknown", detail)
+		return http.StatusBadRequest, result
+	}
+
+	if stacode, _ := module.UpdateRepository(namespace, repository, t.Tag, t.Manifest); stacode != http.StatusOK {
+		detail := map[string]string{"Name": namespace + "/" + repository, "Reference": reference}
+		result, _ := module.FormatErr(module.MANIFEST_UNKNOWN, "manifest unknown", detail)
+		return http.StatusBadRequest, result
+	}
+	if err := t.DeleteReference(namespace, repository, reference); err != nil {
+		detail := map[string]string{"Name": namespace + "/" + repository, "Reference": reference}
+		result, _ := module.FormatErr(module.MANIFEST_INVALID, err.Error(), detail)
+		return http.StatusBadRequest, result
+	}
+
+	result, _ := json.Marshal(map[string]string{})
+	return http.StatusOK, result
 }

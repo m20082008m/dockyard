@@ -117,6 +117,15 @@ func (r *redisdrv) Update(obj interface{}, params ...string) error {
 	return r.Save(obj, params...)
 }
 
+func (r *redisdrv) Delete(obj interface{}) error {
+	key := Key(obj)
+	if _, err := Client.Del(key).Result(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (r *redisdrv) List(obj interface{}) ([]string, error) {
 	object := reflect.TypeOf(obj).Elem().Name()
 	result := []string{}

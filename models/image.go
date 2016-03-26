@@ -26,6 +26,7 @@ type Image struct {
 	Memo       string    `json:"memo" orm:"null;varchar(255)"`
 	Created    time.Time `json:"created" orm:"auto_now_add;type(datetime)"`
 	Updated    time.Time `json:"updated" orm:"auto_now;type(datetime)"`
+	Count      int64     `json:"count" orm:"default(0)"`
 }
 
 func (i *Image) Get(imageid string) (bool, error) {
@@ -46,6 +47,19 @@ func (i *Image) Save(imageid string) error {
 	} else {
 		err = db.Drv.Update(i)
 	}
+
+	return err
+}
+
+func (i *Image) Delete(imageid string) error {
+	img := Image{ImageId: imageid}
+	_, err := img.Get(imageid)
+	if err != nil {
+		return err
+	}
+
+	i.ImageId = imageid
+	err = db.Drv.Delete(i)
 
 	return err
 }

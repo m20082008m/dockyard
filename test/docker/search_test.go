@@ -3,9 +3,8 @@ package docker
 import (
 	"fmt"
 	"os/exec"
-	"testing"
 	"strings"
-
+	"testing"
 )
 
 func TestPush(t *testing.T) {

@@ -53,9 +53,22 @@ func (r *Repository) Save(namespace, repository string) error {
 	return err
 }
 
+func (r *Repository) Delete(namespace, repository string) error {
+	rep := Repository{Namespace: namespace, Repository: repository}
+	_, err := rep.Get(namespace, repository)
+	if err != nil {
+		return err
+	}
+
+	r.Namespace, r.Repository = namespace, repository
+	err = db.Drv.Delete(r)
+
+	return err
+}
 func (r *Repository) List() ([]string, error) {
 	return db.Drv.List(r)
 }
+
 func (r *Repository) GetTagslist() []string {
 	if len(r.Tagslist) <= 0 {
 		return []string{}

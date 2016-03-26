@@ -187,3 +187,43 @@ func GetBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) 
 
 	return http.StatusOK, layer
 }
+
+func DeleteBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
+	digest := ctx.Params(":digest")
+
+	tarsum := strings.Split(digest, ":")[1]
+	i := new(models.Image)
+	if exists, err := i.Get(tarsum); err != nil {
+		log.Error("[REGISTRY API V2] Failed to get tarsum %v: %v", tarsum, err.Error())
+
+		result, _ := module.FormatErr(module.BLOB_UNKNOWN, "blob unknown to registry", digest)
+		return http.StatusBadRequest, result
+	} else if !exists {
+		result, _ := module.FormatErr(module.BLOB_UNKNOWN, "blob unknown to registry", digest)
+		return http.StatusBadRequest, result
+	}
+	if i.Count = i.Count - 1; i.Count == 0 {
+		if err := i.Delete(tarsum); err != nil {
+			result, _ := module.FormatErr(module.BLOB_UNKNOWN, "failed to delete blob in db", digest)
+			return http.StatusBadRequest, result
+		}
+		path := module.GetImagePath(tarsum, setting.APIVERSION_V2)
+		layerfile := module.GetLayerPath(tarsum, "layer", setting.APIVERSION_V2)
+		if err := module.DeleteLayerLocal(path, layerfile); err != nil {
+			result, _ := module.FormatErr(module.BLOB_UNKNOWN, "failed to delete blob in local", digest)
+			return http.StatusBadRequest, result
+		}
+	} else if i.Count > 0 {
+		if err := i.Save(tarsum); err != nil {
+			log.Error("[REGISTRY API V2] Failed to save tarsum %v: %v", tarsum, err.Error())
+
+			result, _ := module.FormatErr(module.BLOB_UNKNOWN, "failed to save blob in db", digest)
+			return http.StatusBadRequest, result
+		}
+	}
+
+	ctx.Resp.Header().Set("Docker-Content-Digest", digest)
+	ctx.Resp.Header().Set("Content-Length", "0")
+
+	return http.StatusOK, []byte{}
+}
