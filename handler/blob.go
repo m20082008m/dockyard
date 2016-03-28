@@ -27,12 +27,12 @@ func HeadBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte)
 	if exists, err := i.Get(tarsum); err != nil {
 		log.Info("[REGISTRY API V2] Failed to get blob %v: %v", tarsum, err.Error())
 
-		result, _ := module.FormatErr(module.DIGEST_INVALID, "blob invalid", digest)
+		result, _ := module.ReportError(module.DIGEST_INVALID, digest)
 		return http.StatusBadRequest, result
 	} else if !exists {
 		log.Info("[REGISTRY API V2] Not found blob: %v", tarsum)
 
-		result, _ := module.FormatErr(module.DIGEST_INVALID, "blob invalid", digest)
+		result, _ := module.ReportError(module.DIGEST_INVALID, digest)
 		return http.StatusNotFound, result
 	}
 
@@ -40,7 +40,7 @@ func HeadBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte)
 	ctx.Resp.Header().Set("Docker-Content-Digest", digest)
 	ctx.Resp.Header().Set("Content-Length", fmt.Sprint(i.Size))
 
-	return http.StatusOK, []byte{}
+	return http.StatusOK, []byte("")
 }
 
 func PostBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
@@ -62,7 +62,7 @@ func PostBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte)
 	ctx.Resp.Header().Set("Location", random)
 	ctx.Resp.Header().Set("Range", "0-0")
 
-	return http.StatusAccepted, []byte{}
+	return http.StatusAccepted, []byte("")
 }
 
 func PatchBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
@@ -89,7 +89,7 @@ func PatchBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte
 		log.Error("[REGISTRY API V2] Failed to save layer %v: %v", layerPathTmp, err.Error())
 
 		detail := map[string]string{"Name": namespace + "/" + repository}
-		result, _ := module.FormatErr(module.BLOB_UPLOAD_INVALID, "blob upload invalid", detail)
+		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, detail)
 		return http.StatusInternalServerError, result
 	}
 
@@ -107,7 +107,7 @@ func PatchBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte
 	ctx.Resp.Header().Set("Location", random)
 	ctx.Resp.Header().Set("Range", fmt.Sprintf("0-%v", len(data)-1))
 
-	return http.StatusAccepted, []byte{}
+	return http.StatusAccepted, []byte("")
 }
 
 func PutBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
@@ -127,7 +127,7 @@ func PutBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) 
 	if err != nil {
 		log.Error("[REGISTRY API V2] Failed to save layer %v: %v", layerPath, err.Error())
 
-		result, _ := module.FormatErr(module.BLOB_UPLOAD_INVALID, "blob upload invalid", err.Error())
+		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, err.Error())
 		return http.StatusInternalServerError, result
 	}
 
@@ -137,7 +137,7 @@ func PutBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) 
 	if err := i.Save(tarsum); err != nil {
 		log.Error("[REGISTRY API V2] Failed to save blob description %v: %v", tarsum, err.Error())
 
-		result, _ := module.FormatErr(module.BLOB_UPLOAD_INVALID, "blob upload invalid", err.Error())
+		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, err.Error())
 		return http.StatusBadRequest, result
 	}
 
@@ -152,7 +152,7 @@ func PutBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) 
 	ctx.Resp.Header().Set("Docker-Content-Digest", digest)
 	ctx.Resp.Header().Set("Location", random)
 
-	return http.StatusCreated, []byte{}
+	return http.StatusCreated, []byte("")
 }
 
 func GetBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
@@ -163,12 +163,12 @@ func GetBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) 
 	if exists, err := i.Get(tarsum); err != nil {
 		log.Error("[REGISTRY API V2] Failed to get blob %v: %v", tarsum, err.Error())
 
-		result, _ := module.FormatErr(module.BLOB_UNKNOWN, "blob unknown to Dockyard", digest)
+		result, _ := module.ReportError(module.BLOB_UNKNOWN, digest)
 		return http.StatusBadRequest, result
 	} else if !exists {
 		log.Error("[REGISTRY API V2] Not found blob: %v: %v", tarsum, err.Error())
 
-		result, _ := module.FormatErr(module.BLOB_UNKNOWN, "blob not found", digest)
+		result, _ := module.ReportError(module.BLOB_UNKNOWN, digest)
 		return http.StatusNotFound, result
 	}
 
@@ -176,7 +176,7 @@ func GetBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) 
 	if err != nil {
 		log.Error("[REGISTRY API V2] Failed to get layer: %v", err.Error())
 
-		result, _ := module.FormatErr(module.BLOB_UNKNOWN, "blob donwload failed", digest)
+		result, _ := module.ReportError(module.BLOB_UNKNOWN, digest)
 		return http.StatusInternalServerError, result
 	}
 
@@ -190,25 +190,25 @@ func GetBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) 
 func DeleteBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
 	digest := ctx.Params(":digest")
 	tarsum := strings.Split(digest, ":")[1]
-	i := new(models.Image)
-	if exists, err := i.Get(tarsum); err != nil {
-		log.Error("[REGISTRY API V2] Failed to get tarsum %v: %v", tarsum, err.Error())
 
-		result, _ := module.FormatErr(module.BLOB_UNKNOWN, "blob unknown to registry", digest)
-		return http.StatusBadRequest, result
-	} else if !exists {
-		result, _ := module.FormatErr(module.BLOB_UNKNOWN, "blob unknown to registry", digest)
+	i := new(models.Image)
+	if exists, err := i.Get(tarsum); err != nil || !exists {
+		log.Error("[REGISTRY API V2] Failed to get tarsum %v", tarsum)
+
+		result, _ := module.ReportError(module.BLOB_UNKNOWN, digest)
 		return http.StatusBadRequest, result
 	}
+
 	if i.Count == 0 {
 		if err := i.Delete(tarsum); err != nil {
-			result, _ := module.FormatErr(module.BLOB_UNKNOWN, "failed to delete blob in db", digest)
+			result, _ := module.ReportError(module.BLOB_UNKNOWN, digest)
 			return http.StatusBadRequest, result
 		}
 		module.CleanCache(tarsum, setting.APIVERSION_V2)
 	}
+
 	ctx.Resp.Header().Set("Docker-Content-Digest", digest)
 	ctx.Resp.Header().Set("Content-Length", "0")
 
-	return http.StatusOK, []byte{}
+	return http.StatusOK, []byte("")
 }

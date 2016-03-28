@@ -38,8 +38,7 @@ func PutManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 		log.Error("[REGISTRY API V2] Failed to get tarsum in manifest")
 
 		detail := map[string]string{"Name": namespace + "/" + repository, "Tag": tag}
-		msg := "Failed to get tarsum info"
-		result, _ := module.FormatErr(module.DIGEST_INVALID, msg, detail)
+		result, _ := module.ReportError(module.DIGEST_INVALID, detail)
 		return http.StatusBadRequest, result
 	}
 
@@ -47,8 +46,7 @@ func PutManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 		log.Error("[REGISTRY API V2] Failed to update image reference counting")
 
 		detail := map[string]string{"Name": namespace + "/" + repository, "Tag": tag}
-		msg := "Failed to update image reference counting"
-		result, _ := module.FormatErr(module.DIGEST_INVALID, msg, detail)
+		result, _ := module.ReportError(module.DIGEST_INVALID, detail)
 		return http.StatusBadRequest, result
 	}
 
@@ -57,8 +55,7 @@ func PutManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 		log.Error("[REGISTRY API V2] Failed to get manifest digest: %v", err.Error())
 
 		detail := map[string]string{"Name": namespace + "/" + repository, "Tag": tag, "Digest": digest}
-		msg := "provided digest did not match uploaded content"
-		result, _ := module.FormatErr(module.DIGEST_INVALID, msg, detail)
+		result, _ := module.ReportError(module.DIGEST_INVALID, detail)
 		return http.StatusBadRequest, result
 	}
 
@@ -67,7 +64,7 @@ func PutManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 		log.Error("[REGISTRY API V2] Failed to save repository %v/%v: %v", namespace, repository, err.Error())
 
 		detail := map[string]string{"Name": namespace + "/" + repository, "Tag": tag}
-		result, _ := module.FormatErr(module.MANIFEST_BLOB_UNKNOWN, err.Error(), detail)
+		result, _ := module.ReportError(module.MANIFEST_BLOB_UNKNOWN, detail)
 		return http.StatusInternalServerError, result
 	}
 
@@ -76,7 +73,7 @@ func PutManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 		log.Error("[REGISTRY API V2] Failed to decode manifest: %v", err.Error())
 
 		detail := map[string]string{"Name": namespace + "/" + repository, "Tag": tag}
-		result, _ := module.FormatErr(module.MANIFEST_INVALID, err.Error(), detail)
+		result, _ := module.ReportError(module.MANIFEST_INVALID, detail)
 		return http.StatusBadRequest, result
 	}
 
@@ -84,7 +81,7 @@ func PutManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 		log.Error("[REGISTRY API V2] Failed to decode manifest: %v", err.Error())
 
 		detail := map[string]string{"Name": namespace + "/" + repository, "Tag": tag}
-		result, _ := module.FormatErr(module.MANIFEST_INVALID, err.Error(), detail)
+		result, _ := module.ReportError(module.MANIFEST_INVALID, detail)
 		return http.StatusBadRequest, result
 	}
 
@@ -103,12 +100,12 @@ func PutManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 		log.Error("[REGISTRY API V2] Failed to upload layer: %v", err)
 
 		detail := map[string]string{"Name": namespace + "/" + repository, "Tag": tag}
-		result, _ := module.FormatErr(module.BLOB_UPLOAD_INVALID, err.Error(), detail)
+		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, detail)
 		return http.StatusBadRequest, result
 	}
 
 	var status = []int{http.StatusBadRequest, http.StatusAccepted, http.StatusCreated}
-	return status[schema], []byte{}
+	return status[schema], []byte("")
 }
 
 func GetTagsListV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
@@ -120,7 +117,7 @@ func GetTagsListV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byt
 		log.Error("[REGISTRY API V2] Failed to get repository %v/%v: %v", namespace, repository, err.Error())
 
 		detail := map[string]string{"Name": namespace + "/" + repository}
-		result, _ := module.FormatErr(module.TAG_INVALID, err.Error(), detail)
+		result, _ := module.ReportError(module.TAG_INVALID, detail)
 		return http.StatusBadRequest, result
 	}
 
@@ -133,7 +130,7 @@ func GetTagsListV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byt
 		log.Error("[REGISTRY API V2] Repository %v/%v tags not found", namespace, repository)
 
 		detail := map[string]string{"Name": namespace + "/" + repository}
-		result, _ := module.FormatErr(module.NAME_UNKNOWN, "repository name not known to registry", detail)
+		result, _ := module.ReportError(module.NAME_UNKNOWN, detail)
 		return http.StatusNotFound, result
 	}
 	data["tags"] = tagslist
@@ -149,10 +146,10 @@ func GetManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 
 	t := new(models.Tag)
 	if exists, err := t.Get(namespace, repository, tag); err != nil || !exists {
-		log.Error("[REGISTRY API V2] Not found manifest: %v", err)
+		log.Error("[REGISTRY API V2] Not found manifest")
 
 		detail := map[string]string{"Name": namespace + "/" + repository, "Tag": tag}
-		result, _ := module.FormatErr(module.MANIFEST_UNKNOWN, "manifest unknown", detail)
+		result, _ := module.ReportError(module.MANIFEST_UNKNOWN, detail)
 		return http.StatusNotFound, result
 	}
 
@@ -161,8 +158,7 @@ func GetManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 		log.Error("[REGISTRY API V2] Failed to get manifest digest: %v", err.Error())
 
 		detail := map[string]string{"Name": namespace + "/" + repository, "Tag": tag}
-		msg := "provided digest did not match uploaded content"
-		result, _ := module.FormatErr(module.DIGEST_INVALID, msg, detail)
+		result, _ := module.ReportError(module.DIGEST_INVALID, detail)
 		return http.StatusInternalServerError, result
 	}
 
@@ -177,86 +173,77 @@ func GetManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 }
 func DeleteManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
 	//TODO: to consider parallel situation
-
 	namespace := ctx.Params(":namespace")
 	repository := ctx.Params(":repository")
 	reference := ctx.Params(":reference")
 
 	r := new(models.Repository)
-	if exists, err := r.Get(namespace, repository); err != nil {
-		log.Info("[REGISTRY API V2] Failed to get tag : %v", err.Error())
+	if exists, err := r.Get(namespace, repository); err != nil || !exists {
+		log.Info("[REGISTRY API V2] Failed to get repository: %v/%v", namespace, repository)
 
 		detail := map[string]string{"Name": namespace + "/" + repository, "Reference": reference}
-		result, _ := module.FormatErr(module.MANIFEST_UNKNOWN, "manifest unknown", detail)
-		return http.StatusBadRequest, result
-	} else if !exists {
-		detail := map[string]string{"Name": namespace + "/" + repository, "Reference": reference}
-		result, _ := module.FormatErr(module.MANIFEST_UNKNOWN, "manifest unknown", detail)
+		result, _ := module.ReportError(module.MANIFEST_UNKNOWN, detail)
 		return http.StatusBadRequest, result
 	}
+
 	tagslist := r.GetTagslist()
 	for _, tag := range tagslist {
 		t := new(models.Tag)
-		if exists, err := t.Get(namespace, repository, tag); err != nil {
-			log.Info("[REGISTRY API V2] Failed to get tag : %v", err.Error())
+		if exists, err := t.Get(namespace, repository, tag); err != nil || !exists {
+			log.Info("[REGISTRY API V2] Failed to get tag : %v/%v:%v", namespace, repository, tag)
 
 			detail := map[string]string{"Name": namespace + "/" + repository, "Reference": reference}
-			result, _ := module.FormatErr(module.MANIFEST_UNKNOWN, "manifest unknown", detail)
-			return http.StatusBadRequest, result
-		} else if !exists {
-			detail := map[string]string{"Name": namespace + "/" + repository, "Reference": reference}
-			result, _ := module.FormatErr(module.MANIFEST_UNKNOWN, "manifest unknown", detail)
+			result, _ := module.ReportError(module.MANIFEST_UNKNOWN, detail)
 			return http.StatusBadRequest, result
 		}
+
 		digest, err := signature.DigestManifest([]byte(t.Manifest))
 		if err != nil {
 			log.Info("[REGISTRY API V2] Failed to get tag : %v", err.Error())
 
 			detail := map[string]string{"Name": namespace + "/" + repository, "Reference": reference}
-			result, _ := module.FormatErr(module.MANIFEST_UNKNOWN, "manifest unknown", detail)
+			result, _ := module.ReportError(module.MANIFEST_UNKNOWN, detail)
 			return http.StatusBadRequest, result
 		}
+
 		if strings.Compare(digest, reference) == 0 {
 			if err := module.UpdateTaglist(namespace, repository, tag); err != nil {
 				detail := map[string]string{"Name": namespace + "/" + repository, "Reference": reference}
-				result, _ := module.FormatErr(module.MANIFEST_UNKNOWN, "manifest unknown", detail)
+				result, _ := module.ReportError(module.MANIFEST_UNKNOWN, detail)
 				return http.StatusBadRequest, result
 			}
+
 			if tarsumlist, err := module.GetTarsumlist([]byte(t.Manifest)); err != nil {
 				detail := map[string]string{"Name": namespace + "/" + repository, "Reference": reference}
-				result, _ := module.FormatErr(module.MANIFEST_INVALID, err.Error(), detail)
+				result, _ := module.ReportError(module.MANIFEST_INVALID, detail)
 				return http.StatusBadRequest, result
-
 			} else {
 				for _, tarsum := range tarsumlist {
 					i := new(models.Image)
-					if exists, err := i.Get(tarsum); err != nil {
-						log.Error("[REGISTRY API V2] Failed to get tarsum %v: %v", tarsum, err.Error())
+					if exists, err := i.Get(tarsum); err != nil || !exists {
+						log.Error("[REGISTRY API V2] Failed to get tarsum %v", tarsum)
 
-						result, _ := module.FormatErr(module.BLOB_UNKNOWN, "blob unknown to registry", digest)
-						return http.StatusBadRequest, result
-					} else if !exists {
-						result, _ := module.FormatErr(module.BLOB_UNKNOWN, "blob unknown to registry", digest)
+						result, _ := module.ReportError(module.BLOB_UNKNOWN, digest)
 						return http.StatusBadRequest, result
 					}
+
 					i.Count = i.Count - 1
 					if err := i.Save(tarsum); err != nil {
 						log.Error("[REGISTRY API V2] Failed to save tarsum %v: %v", tarsum, err.Error())
 
-						result, _ := module.FormatErr(module.BLOB_UPLOAD_INVALID, err.Error(), "Failed to save layer to db")
+						result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, "Failed to save layer to db")
 						return http.StatusBadRequest, result
 					}
 				}
 			}
+
 			if err := t.Delete(namespace, repository, tag); err != nil {
 				detail := map[string]string{"Name": namespace + "/" + repository, "Reference": reference}
-				result, _ := module.FormatErr(module.MANIFEST_INVALID, err.Error(), detail)
+				result, _ := module.ReportError(module.MANIFEST_INVALID, detail)
 				return http.StatusBadRequest, result
 			}
-
 		}
-
 	}
 
-	return http.StatusOK, []byte{}
+	return http.StatusOK, []byte("")
 }

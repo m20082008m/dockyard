@@ -93,10 +93,9 @@ func new() (*radosDriver, error) {
 
 func (r *radosdesc) Save(file string) (string, error) {
 	//upload replicated file
-	//TODO :
 	fp, err := os.Open(file)
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 	defer fp.Close()
 

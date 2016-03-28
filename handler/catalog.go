@@ -18,7 +18,7 @@ func GetCatalogV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte
 	if err != nil {
 		log.Error("[REGISTRY API V2] Failed to list repositories: %v", err)
 
-		result, _ := module.FormatErr(module.UNKNOWN, "unknown error", err.Error())
+		result, _ := module.ReportError(module.UNKNOWN, err.Error())
 		return http.StatusInternalServerError, result
 	}
 

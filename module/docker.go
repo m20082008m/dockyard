@@ -21,6 +21,8 @@ import (
 )
 
 //adapt to docker errorcode
+var errdesc = make(map[string]string)
+
 var (
 	UNKNOWN               = "UNKNOWN"
 	DIGEST_INVALID        = "DIGEST_INVALID"
@@ -36,26 +38,41 @@ var (
 	BLOB_UPLOAD_INVALID   = "BLOB_UPLOAD_INVALID"
 )
 
-type Errors struct {
-	Errors []Error `json:"errors"`
+func init() {
+	errdesc[UNKNOWN] = "unknown error"
+	errdesc[DIGEST_INVALID] = "provided digest did not match uploaded content"
+	errdesc[NAME_INVALID] = "invalid repository name"
+	errdesc[TAG_INVALID] = "manifest tag did not match URI"
+	errdesc[NAME_UNKNOWN] = "repository name not known to registry"
+	errdesc[MANIFEST_UNKNOWN] = "manifest unknown"
+	errdesc[MANIFEST_INVALID] = "manifest invalid"
+	errdesc[MANIFEST_UNVERIFIED] = "manifest failed signature verification"
+	errdesc[MANIFEST_BLOB_UNKNOWN] = "blob unknown to registry"
+	errdesc[BLOB_UNKNOWN] = "blob unknown to registry"
+	errdesc[BLOB_UPLOAD_UNKNOWN] = "blob upload unknown to registry"
+	errdesc[BLOB_UPLOAD_INVALID] = "blob upload invalid"
 }
 
-type Error struct {
-	Code    string      `json:"code"`
-	Message string      `json:"message"`
-	Detail  interface{} `json:"detail,omitempty"`
+type errors struct {
+	errors []errunit `json:"errors"`
 }
 
-func FormatErr(code, message string, detail interface{}) ([]byte, error) {
-	var errs = Errors{}
+type errunit struct {
+	code    string      `json:"code"`
+	message string      `json:"message"`
+	detail  interface{} `json:"detail,omitempty"`
+}
 
-	item := Error{
-		Code:    code,
-		Message: message,
-		Detail:  detail,
+func ReportError(code string, detail interface{}) ([]byte, error) {
+	var errs = errors{}
+
+	item := errunit{
+		code:    code,
+		message: errdesc[code],
+		detail:  detail,
 	}
 
-	errs.Errors = append(errs.Errors, item)
+	errs.errors = append(errs.errors, item)
 
 	result, err := json.Marshal(errs)
 	return result, err
@@ -117,7 +134,13 @@ func GetTarsumlist(data []byte) ([]string, error) {
 	if err := json.Unmarshal(data, &manifest); err != nil {
 		return []string{}, err
 	}
+
 	schemaVersion := int64(manifest["schemaVersion"].(float64))
+	if schemaVersion == 2 {
+		confblobsum := manifest["config"].(map[string]interface{})["digest"].(string)
+		tarsum := strings.Split(confblobsum, ":")[1]
+		tarsumlist = append(tarsumlist, tarsum)
+	}
 
 	section := layers[schemaVersion]
 	item := tarsums[schemaVersion]
@@ -239,12 +262,13 @@ func UploadLayer(tarsumlist []string) error {
 			return fmt.Errorf("layer is not existent")
 		}
 
+		//TODO:
 		if _, err = os.Stat(i.Path); err != nil && !setting.Cachable {
 			continue
 		}
 
 		pathlist = append(pathlist, i.Path)
-		//1)save same layer mutiple times 2)need to solve upload failed situation
+		//TODO: consider to solve saving same layer mutiple times,different from each OSS
 		if _, err = backend.Drv.Save(i.Path); err != nil {
 			issuccess = false
 			break
