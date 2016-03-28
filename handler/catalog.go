@@ -12,15 +12,16 @@ import (
 )
 
 func GetCatalogV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
-
-	var repolist []string
 	r := new(models.Repository)
+
 	repolist, err := r.List()
 	if err != nil {
-		detail := map[string]string{}
-		result, _ := module.FormatErr(module.BLOB_UNKNOWN, "failed to find repositories", detail)
-		return http.StatusBadRequest, result
+		log.Error("[REGISTRY API V2] Failed to list repositories: %v", err)
+
+		result, _ := module.FormatErr(module.UNKNOWN, "unknown error", err.Error())
+		return http.StatusInternalServerError, result
 	}
+
 	result, _ := json.Marshal(map[string]interface{}{"repositories": repolist})
 	return http.StatusOK, result
 }

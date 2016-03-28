@@ -20,7 +20,9 @@ import (
 	"github.com/containerops/dockyard/utils/setting"
 )
 
+//adapt to docker errorcode
 var (
+	UNKNOWN               = "UNKNOWN"
 	DIGEST_INVALID        = "DIGEST_INVALID"
 	NAME_INVALID          = "NAME_INVALID"
 	TAG_INVALID           = "TAG_INVALID"
@@ -100,64 +102,88 @@ func ParseManifest(data []byte, namespace, repository, tag string) (error, int64
 			return err, 0
 		}
 	} else {
-		return fmt.Errorf("Invalid schema version"), 0
+		return fmt.Errorf("invalid schema version"), 0
 	}
 
 	return nil, schemaVersion
 }
 
-//Update manifest info in db
-func UpdateManifest(namespace, repository, tag string, manifest string) (int, []byte) {
-	var layerdesc = []string{"", "fsLayers", "layers"}
-	var tarsumdesc = []string{"", "blobSum", "digest"}
-	t := new(models.Tag)
-	if exists, err := t.Get(namespace, repository, tag); err != nil {
-		result, _ := json.Marshal(map[string]string{"message": "Not found manifest"})
-		return http.StatusNotFound, result
-	} else if !exists {
-		var mnf map[string]interface{}
-		if err := json.Unmarshal([]byte(manifest), &mnf); err != nil {
-			result, _ := json.Marshal(map[string]string{"message": "Failed to decode manifest"})
-			return http.StatusBadRequest, result
-		}
-		schemaVersion := int64(mnf["schemaVersion"].(float64))
-		section := layerdesc[schemaVersion]
-		item := tarsumdesc[schemaVersion]
-		for k := len(mnf[section].([]interface{})) - 1; k >= 0; k-- {
-			sha := mnf[section].([]interface{})[k].(map[string]interface{})[item].(string)
-			tarsum := strings.Split(sha, ":")[1]
+func GetTarsumlist(data []byte) ([]string, error) {
+	var tarsumlist []string
+	var layers = []string{"", "fsLayers", "layers"}
+	var tarsums = []string{"", "blobSum", "digest"}
 
+	var manifest map[string]interface{}
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return []string{}, err
+	}
+	schemaVersion := int64(manifest["schemaVersion"].(float64))
+
+	section := layers[schemaVersion]
+	item := tarsums[schemaVersion]
+	for i := len(manifest[section].([]interface{})) - 1; i >= 0; i-- {
+		blobsum := manifest[section].([]interface{})[i].(map[string]interface{})[item].(string)
+		tarsum := strings.Split(blobsum, ":")[1]
+		tarsumlist = append(tarsumlist, tarsum)
+	}
+
+	return tarsumlist, nil
+}
+
+//image reference counting increased when repository upload successfully
+func UpdateImgRefCnt(namespace, repository, tag string, tarsumlist []string) error {
+	if len(tarsumlist) <= 0 {
+		return fmt.Errorf("no blobs")
+	}
+
+	t := new(models.Tag)
+	//to identify whether the same user/repo:tag upload repeatedly
+	if exists, err := t.Get(namespace, repository, tag); err != nil {
+		return err
+	} else if !exists {
+		for _, tarsum := range tarsumlist {
 			i := new(models.Image)
 			if exists, err := i.Get(tarsum); err != nil {
-				result, _ := json.Marshal(map[string]string{"message": "Failed to get tarsum"})
-				return http.StatusBadRequest, result
+				return err
 			} else if !exists {
-				result, _ := json.Marshal(map[string]string{"message": "error: Not found tarsum"})
-				return http.StatusBadRequest, result
+				return fmt.Errorf("blobs not existed")
 			}
 
 			i.Count = i.Count + 1
 			if err := i.Save(tarsum); err != nil {
-				result, _ := json.Marshal(map[string]string{"message": "Failed to save tarsum"})
-				return http.StatusBadRequest, result
+				return err
 			}
 		}
 	}
-	result, _ := json.Marshal(map[string]string{})
-	return http.StatusOK, result
+
+	return nil
+}
+
+func UpdateTag(namespace, repository, tag string, digest string) error {
+	t := new(models.Tag)
+	if exists, err := t.Get(namespace, repository, tag); err != nil {
+		return err
+	} else if !exists {
+		return fmt.Errorf("tag not found")
+	}
+
+	t.Reference = digest
+	if err := t.Save(namespace, repository, tag); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 //Update repository info in db
-func UpdateRepository(namespace, repository, tag string, manifest string) (int, []byte) {
+func UpdateTaglist(namespace, repository, tag string, manifest string) error {
 	r := new(models.Repository)
 	if exists, err := r.Get(namespace, repository); err != nil {
-		result, _ := json.Marshal(map[string]string{"message": "Not found manifest"})
-		return http.StatusNotFound, result
+		return err
 	} else if exists {
 		r := new(models.Repository)
 		if exists, err := r.Get(namespace, repository); err != nil || !exists {
-			result, _ := json.Marshal(map[string]string{"message": "Repository is not exists"})
-			return http.StatusBadRequest, result
+			return fmt.Errorf("blobs invalid")
 		}
 
 		exists = false
@@ -171,55 +197,41 @@ func UpdateRepository(namespace, repository, tag string, manifest string) (int, 
 			}
 		}
 		if exists == false {
-			result, _ := json.Marshal(map[string]string{"message": "tag is not exists"})
-			return http.StatusBadRequest, result
+			return fmt.Errorf("no tags")
 		}
 		if len(tagslist) == 0 {
 			if err := r.Delete(namespace, repository); err != nil {
-				result, _ := json.Marshal(map[string]string{"message": "Failed to delete repository"})
-				return http.StatusBadRequest, result
+				return err
 			}
-			result, _ := json.Marshal(map[string]string{})
-			return http.StatusOK, result
 
+			return nil
 		}
+
 		r.Tagslist = r.SaveTagslist(tagslist)
 		if err := r.Save(namespace, repository); err != nil {
-			result, _ := json.Marshal(map[string]string{"message": "Imageid is not exists"})
-			return http.StatusBadRequest, result
+			return err
 		}
-
 	}
-	result, _ := json.Marshal(map[string]string{})
-	return http.StatusOK, result
+
+	return nil
 }
 
 //Upload the layer of image to object storage service,support to analyzed docker V1/V2 manifest now
-func UploadLayer(data []byte) error {
+func UploadLayer(tarsumlist []string) error {
 	if backend.Drv == nil {
 		return nil
 	}
 
-	var err error
-	var manifest map[string]interface{}
-	if err = json.Unmarshal(data, &manifest); err != nil {
-		return err
+	if len(tarsumlist) <= 0 {
+		return fmt.Errorf("no blobs")
 	}
-	schemaVersion := int64(manifest["schemaVersion"].(float64))
 
-	var layerdesc = []string{"", "fsLayers", "layers"}
-	var tarsumdesc = []string{"", "blobSum", "digest"}
-	section := layerdesc[schemaVersion]
-	item := tarsumdesc[schemaVersion]
-
-	var tarsumlist []string
 	var pathlist []string
 	var issuccess bool = true
-	for j := len(manifest[section].([]interface{})) - 1; j >= 0; j-- {
-		blobsum := manifest[section].([]interface{})[j].(map[string]interface{})[item].(string)
-		tarsum := strings.Split(blobsum, ":")[1]
-
+	var err error
+	for _, tarsum := range tarsumlist {
 		i := new(models.Image)
+
 		var exists bool
 		if exists, err = i.Get(tarsum); err != nil {
 			return err
@@ -231,9 +243,8 @@ func UploadLayer(data []byte) error {
 			continue
 		}
 
-		tarsumlist = append(tarsumlist, tarsum)
 		pathlist = append(pathlist, i.Path)
-		//TODO: 1)save same layer mutiple times 2)need to solve upload failed situation
+		//1)save same layer mutiple times 2)need to solve upload failed situation
 		if _, err = backend.Drv.Save(i.Path); err != nil {
 			issuccess = false
 			break
@@ -307,22 +318,6 @@ func SaveLayerLocal(srcPath, srcFile, dstPath, dstFile string, reqbody []byte) (
 	}
 
 	return len(data), nil
-}
-
-func DeleteLayerLocal(layerpath, layerfile string) error {
-	if utils.IsFileExist(layerfile) {
-		os.RemoveAll(layerpath)
-	}
-
-	if backend.Drv == nil {
-		return fmt.Errorf("Delete file failure: driver is not exists")
-	}
-
-	err := backend.Drv.Delete(layerfile)
-	if err != nil {
-		return fmt.Errorf("Failed to delete layer: %v", err.Error())
-	}
-	return nil
 }
 
 //codes as below are ported to support for docker to parse request URL,and it would be update soon

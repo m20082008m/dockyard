@@ -32,9 +32,21 @@ func PutManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 		manifest, _ = ctx.Req.Body().Bytes()
 	}
 
-	if stacode, _ := module.UpdateManifest(namespace, repository, tag, string(manifest)); stacode != http.StatusOK {
+	tarsumlist, err := module.GetTarsumlist(manifest)
+	if err != nil {
+		log.Error("[REGISTRY API V2] Failed to get tarsum in manifest")
+
 		detail := map[string]string{"Name": namespace + "/" + repository, "Tag": tag}
-		msg := "Failed to update manifest info"
+		msg := "Failed to get tarsum info"
+		result, _ := module.FormatErr(module.DIGEST_INVALID, msg, detail)
+		return http.StatusBadRequest, result
+	}
+
+	if err := module.UpdateImgRefCnt(namespace, repository, tag, tarsumlist); err != nil {
+		log.Error("[REGISTRY API V2] Failed to update image reference counting")
+
+		detail := map[string]string{"Name": namespace + "/" + repository, "Tag": tag}
+		msg := "Failed to update image reference counting"
 		result, _ := module.FormatErr(module.DIGEST_INVALID, msg, detail)
 		return http.StatusBadRequest, result
 	}
@@ -67,18 +79,11 @@ func PutManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 		return http.StatusBadRequest, result
 	}
 
-	tg := new(models.Tag)
-	if exists, err := tg.Get(namespace, repository, tag); err != nil || !exists {
+	if err := module.UpdateTag(namespace, repository, tag, digest); err != nil {
+		log.Error("[REGISTRY API V2] Failed to decode manifest: %v", err.Error())
+
 		detail := map[string]string{"Name": namespace + "/" + repository, "Tag": tag}
-		msg := "manifest unknow"
-		result, _ := module.FormatErr(module.DIGEST_INVALID, msg, detail)
-		return http.StatusBadRequest, result
-	}
-	tg.Reference = digest
-	if err := tg.Save(namespace, repository, tag); err != nil {
-		detail := map[string]string{"Name": namespace + "/" + repository, "Tag": tag}
-		msg := "failed to save manifest"
-		result, _ := module.FormatErr(module.DIGEST_INVALID, msg, detail)
+		result, _ := module.FormatErr(module.MANIFEST_INVALID, err.Error(), detail)
 		return http.StatusBadRequest, result
 	}
 
@@ -93,7 +98,7 @@ func PutManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 	ctx.Resp.Header().Set("Docker-Content-Digest", digest)
 	ctx.Resp.Header().Set("Location", random)
 
-	if err := module.UploadLayer(manifest); err != nil {
+	if err := module.UploadLayer(tarsumlist); err != nil {
 		log.Error("[REGISTRY API V2] Failed to upload layer: %v", err)
 
 		detail := map[string]string{"Name": namespace + "/" + repository, "Tag": tag}
@@ -172,7 +177,6 @@ func GetManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 
 func DeleteManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
 	//TODO: to consider parallel situation
-
 	namespace := ctx.Params(":namespace")
 	repository := ctx.Params(":repository")
 	reference := ctx.Params(":reference")
@@ -190,7 +194,7 @@ func DeleteManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, [
 		return http.StatusBadRequest, result
 	}
 
-	if stacode, _ := module.UpdateRepository(namespace, repository, t.Tag, t.Manifest); stacode != http.StatusOK {
+	if err := module.UpdateTaglist(namespace, repository, t.Tag, t.Manifest); err != nil {
 		detail := map[string]string{"Name": namespace + "/" + repository, "Reference": reference}
 		result, _ := module.FormatErr(module.MANIFEST_UNKNOWN, "manifest unknown", detail)
 		return http.StatusBadRequest, result
