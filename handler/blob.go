@@ -190,46 +190,23 @@ func GetBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) 
 func DeleteBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
 	digest := ctx.Params(":digest")
 	tarsum := strings.Split(digest, ":")[1]
-
 	i := new(models.Image)
 	if exists, err := i.Get(tarsum); err != nil {
-		log.Error("[REGISTRY API V2] Failed to get blob %v: %v", tarsum, err.Error())
+		log.Error("[REGISTRY API V2] Failed to get tarsum %v: %v", tarsum, err.Error())
 
-		result, _ := module.FormatErr(module.BLOB_UNKNOWN, "blob unknown to Dockyard", digest)
+		result, _ := module.FormatErr(module.BLOB_UNKNOWN, "blob unknown to registry", digest)
 		return http.StatusBadRequest, result
 	} else if !exists {
-		log.Error("[REGISTRY API V2] Not found blob %v", tarsum)
-
-		result, _ := module.FormatErr(module.BLOB_UNKNOWN, "blob not found", digest)
+		result, _ := module.FormatErr(module.BLOB_UNKNOWN, "blob unknown to registry", digest)
 		return http.StatusBadRequest, result
 	}
-
-	i.Count = i.Count - 1
-	//delete the blob when reference counting is 0
 	if i.Count == 0 {
-		//delete blob description in db
 		if err := i.Delete(tarsum); err != nil {
-			log.Error("[REGISTRY API V2] Failed to delete blob %v in db", tarsum)
-
-			result, _ := module.FormatErr(module.BLOB_UNKNOWN, "delete blob description failed", digest)
-			return http.StatusInternalServerError, result
+			result, _ := module.FormatErr(module.BLOB_UNKNOWN, "failed to delete blob in db", digest)
+			return http.StatusBadRequest, result
 		}
-		//delete blob layer in local fs
 		module.CleanCache(tarsum, setting.APIVERSION_V2)
-	} else if i.Count > 0 { //reduce reference counting when the blob is used by the other repository
-		if err := i.Save(tarsum); err != nil {
-			log.Error("[REGISTRY API V2] Failed to update blob %v in db: %v", tarsum, err.Error())
-
-			result, _ := module.FormatErr(module.BLOB_UNKNOWN, "update blob failed", digest)
-			return http.StatusInternalServerError, result
-		}
-	} else {
-		log.Error("[REGISTRY API V2] Exception in blob content", tarsum)
-
-		result, _ := module.FormatErr(module.BLOB_UNKNOWN, "blob content invalid", digest)
-		return http.StatusInternalServerError, result
 	}
-
 	ctx.Resp.Header().Set("Docker-Content-Digest", digest)
 	ctx.Resp.Header().Set("Content-Length", "0")
 

@@ -176,7 +176,7 @@ func UpdateTag(namespace, repository, tag string, digest string) error {
 }
 
 //Update repository info in db
-func UpdateTaglist(namespace, repository, tag string, manifest string) error {
+func UpdateTaglist(namespace, repository, tag string) error {
 	r := new(models.Repository)
 	if exists, err := r.Get(namespace, repository); err != nil {
 		return err

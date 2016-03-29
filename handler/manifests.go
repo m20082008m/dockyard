@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/astaxie/beego/logs"
 	"gopkg.in/macaron.v1"
@@ -174,15 +175,15 @@ func GetManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 
 	return http.StatusOK, []byte(t.Manifest)
 }
-
 func DeleteManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
 	//TODO: to consider parallel situation
+
 	namespace := ctx.Params(":namespace")
 	repository := ctx.Params(":repository")
 	reference := ctx.Params(":reference")
 
-	t := new(models.Tag)
-	if exists, err := t.GetReference(namespace, repository, reference); err != nil || !exists {
+	r := new(models.Repository)
+	if exists, err := r.Get(namespace, repository); err != nil {
 		log.Info("[REGISTRY API V2] Failed to get tag : %v", err.Error())
 
 		detail := map[string]string{"Name": namespace + "/" + repository, "Reference": reference}
@@ -193,18 +194,69 @@ func DeleteManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, [
 		result, _ := module.FormatErr(module.MANIFEST_UNKNOWN, "manifest unknown", detail)
 		return http.StatusBadRequest, result
 	}
+	tagslist := r.GetTagslist()
+	for _, tag := range tagslist {
+		t := new(models.Tag)
+		if exists, err := t.Get(namespace, repository, tag); err != nil {
+			log.Info("[REGISTRY API V2] Failed to get tag : %v", err.Error())
 
-	if err := module.UpdateTaglist(namespace, repository, t.Tag, t.Manifest); err != nil {
-		detail := map[string]string{"Name": namespace + "/" + repository, "Reference": reference}
-		result, _ := module.FormatErr(module.MANIFEST_UNKNOWN, "manifest unknown", detail)
-		return http.StatusBadRequest, result
-	}
-	if err := t.DeleteReference(namespace, repository, reference); err != nil {
-		detail := map[string]string{"Name": namespace + "/" + repository, "Reference": reference}
-		result, _ := module.FormatErr(module.MANIFEST_INVALID, err.Error(), detail)
-		return http.StatusBadRequest, result
+			detail := map[string]string{"Name": namespace + "/" + repository, "Reference": reference}
+			result, _ := module.FormatErr(module.MANIFEST_UNKNOWN, "manifest unknown", detail)
+			return http.StatusBadRequest, result
+		} else if !exists {
+			detail := map[string]string{"Name": namespace + "/" + repository, "Reference": reference}
+			result, _ := module.FormatErr(module.MANIFEST_UNKNOWN, "manifest unknown", detail)
+			return http.StatusBadRequest, result
+		}
+		digest, err := signature.DigestManifest([]byte(t.Manifest))
+		if err != nil {
+			log.Info("[REGISTRY API V2] Failed to get tag : %v", err.Error())
+
+			detail := map[string]string{"Name": namespace + "/" + repository, "Reference": reference}
+			result, _ := module.FormatErr(module.MANIFEST_UNKNOWN, "manifest unknown", detail)
+			return http.StatusBadRequest, result
+		}
+		if strings.Compare(digest, reference) == 0 {
+			if err := module.UpdateTaglist(namespace, repository, tag); err != nil {
+				detail := map[string]string{"Name": namespace + "/" + repository, "Reference": reference}
+				result, _ := module.FormatErr(module.MANIFEST_UNKNOWN, "manifest unknown", detail)
+				return http.StatusBadRequest, result
+			}
+			if tarsumlist, err := module.GetTarsumlist([]byte(t.Manifest)); err != nil {
+				detail := map[string]string{"Name": namespace + "/" + repository, "Reference": reference}
+				result, _ := module.FormatErr(module.MANIFEST_INVALID, err.Error(), detail)
+				return http.StatusBadRequest, result
+
+			} else {
+				for _, tarsum := range tarsumlist {
+					i := new(models.Image)
+					if exists, err := i.Get(tarsum); err != nil {
+						log.Error("[REGISTRY API V2] Failed to get tarsum %v: %v", tarsum, err.Error())
+
+						result, _ := module.FormatErr(module.BLOB_UNKNOWN, "blob unknown to registry", digest)
+						return http.StatusBadRequest, result
+					} else if !exists {
+						result, _ := module.FormatErr(module.BLOB_UNKNOWN, "blob unknown to registry", digest)
+						return http.StatusBadRequest, result
+					}
+					i.Count = i.Count - 1
+					if err := i.Save(tarsum); err != nil {
+						log.Error("[REGISTRY API V2] Failed to save tarsum %v: %v", tarsum, err.Error())
+
+						result, _ := module.FormatErr(module.BLOB_UPLOAD_INVALID, err.Error(), "Failed to save layer to db")
+						return http.StatusBadRequest, result
+					}
+				}
+			}
+			if err := t.Delete(namespace, repository, tag); err != nil {
+				detail := map[string]string{"Name": namespace + "/" + repository, "Reference": reference}
+				result, _ := module.FormatErr(module.MANIFEST_INVALID, err.Error(), detail)
+				return http.StatusBadRequest, result
+			}
+
+		}
+
 	}
 
-	result, _ := json.Marshal(map[string]string{})
-	return http.StatusOK, result
+	return http.StatusOK, []byte{}
 }
